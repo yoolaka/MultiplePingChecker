@@ -1,30 +1,29 @@
 package main
 
 import (
-	//"bytes"
 	"bufio"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+	"net/http"
 	"os/exec"
 	"strconv"
-	//	"golang.org/x/net/icmp"
-	//	"golang.org/x/net/ipv4"
-	"net/http"
 )
 
 type (
 	ping_host struct {
 		HostName string `json:"hostname"`
 		Count    int    `json:"count"`
-		Channel  chan string
-		Buffer   string
+	}
+	ping_host_attr struct {
+		Channel chan string
+		Buffer  string
 	}
 )
 
 var (
-	hosts = map[string]*ping_host{}
-	//buffers       = map[string]string{}
-	//channels      = map[string](chan string){}
+	hosts         = map[string]*ping_host{}
+	host_attrs    = map[string]*ping_host_attr{}
+	ping_cmds     = map[string]*exec.Cmd{}
 	index         = 1
 	default_count = 100
 	default_name  = ""
@@ -41,12 +40,13 @@ func main() {
 	// Routes
 	e.POST("/ping", createPing)
 	e.GET("/ping", getPing)
-	e.GET("/ping/:hostname", getStatus)
+	e.GET("/ping/:hostname", getPingStatus)
 	e.DELETE("/ping/:hostname", deletePing)
 
 	// Start server
 	e.Logger.Fatal(e.Start(":9335"))
 }
+
 func createPing(c echo.Context) error {
 	host_name := c.FormValue("server")
 	count_string := c.FormValue("count")
@@ -55,27 +55,35 @@ func createPing(c echo.Context) error {
 		c.Logger().Error(err)
 		return c.String(http.StatusBadRequest, "Invaild count")
 	}
+	if _, exist := hosts[host_name]; exist {
+		c.Logger().Error("Host already exists")
+		return c.String(http.StatusBadRequest, "")
+	}
 
 	var buffer string
 
-	channel := make(chan string)
+	channel := make(chan string, 1)
 	host := &ping_host{
 		host_name,
 		count,
+	}
+	host_attr := &ping_host_attr{
 		channel,
 		buffer,
 	}
 
+	ping_cmd := exec.Command("ping", "-c", count_string, host_name)
 	hosts[host.HostName] = host
+	host_attrs[host.HostName] = host_attr
+	ping_cmds[host.HostName] = ping_cmd
 
-	go executePing(c, host_name, count_string, channel)
+	go executePing(c, ping_cmd, host_name, channel)
 
 	return c.String(http.StatusCreated, "")
 }
 
-func executePing(c echo.Context, host_name string, count_string string, channel chan<- string) {
+func executePing(c echo.Context, ping_cmd *exec.Cmd, host_name string, channel chan<- string) {
 
-	ping_cmd := exec.Command("ping", "-c", count_string, host_name)
 	stdout, err := ping_cmd.StdoutPipe()
 	if err != nil {
 		c.Logger().Error(err)
@@ -87,35 +95,36 @@ func executePing(c echo.Context, host_name string, count_string string, channel 
 	}
 	var line string
 
-	if host, exist := hosts[host_name]; exist {
+	if host_attr, exist := host_attrs[host_name]; exist {
 		for {
 			line, err = scanner.ReadString('\n')
-			//c.Logger().Print(line)
+			c.Logger().Print(line)
 			channel <- line
-			host.Buffer += line
+			host_attr.Buffer += line
 			if err != nil {
 				break
 			}
 
 		}
 	}
-	//channel <- buf.String()
 	ping_cmd.Wait()
 
 }
 func getPing(c echo.Context) error {
-	for host := range hosts {
-
+	json_hosts := make([]ping_host, 0)
+	for _, host := range hosts {
+		json_hosts = append(json_hosts, *host)
 	}
+	return c.JSON(http.StatusOK, json_hosts)
 }
-func getStatus(c echo.Context) error {
+func getPingStatus(c echo.Context) error {
 	host_name := c.Param("hostname")
-	if host, exist := hosts[host_name]; exist {
+	if host_attr, exist := host_attrs[host_name]; exist {
 		wait := c.QueryParam("wait")
 		if wait == "true" {
 			c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextPlain)
 			c.Response().WriteHeader(http.StatusOK)
-			for buf := range host.Channel {
+			for buf := range host_attr.Channel {
 				if _, err := c.Response().Write([]byte(buf)); err != nil {
 					return err
 				}
@@ -123,13 +132,17 @@ func getStatus(c echo.Context) error {
 			}
 			return nil
 		} else {
-			return c.String(http.StatusOK, host.Buffer)
+			return c.String(http.StatusOK, host_attr.Buffer)
 		}
 	} else {
 		return c.String(http.StatusNotFound, "No registered hostname")
 	}
 }
 func deletePing(c echo.Context) error {
-
-	return c.String(http.StatusOK, "")
+	host_name := c.Param("hostname")
+	if ping_cmd, exist := ping_cmds[host_name]; exist {
+		c.Logger().Print("here")
+		ping_cmd.Process.Kill()
+	}
+	return c.String(http.StatusNoContent, "")
 }
