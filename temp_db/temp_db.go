@@ -12,45 +12,52 @@ type (
 		Buffer   string
 		PingCmd  *exec.Cmd
 	}
-	TempDB struct {
+	tempDB struct {
 		PingHosts    map[string]*PingHostEntry
 		DefaultCount int
 		DefaultName  string
 	}
+	TempDB interface {
+		InsertPingHost(key string, value *PingHostEntry) int
+		DeletePingHost(key string) int
+		SearchHost(key string) (*PingHostEntry, bool)
+		GetPingHost() *map[string]*PingHostEntry
+	}
 )
 
 var (
-	PrimaryDB *TempDB = nil
-	SUCCESS           = 1
-	FAILED            = 0
+	PrimaryDB        *tempDB = nil
+	PrimaryInterface *TempDB = nil
+	SUCCESS                  = 1
+	FAILED                   = 0
 )
 
-func (t *TempDB) InsertPingHost(key string, value *PingHostEntry) int {
+func (t tempDB) InsertPingHost(key string, value *PingHostEntry) int {
 	if _, exist := t.PingHosts[key]; exist {
 		return FAILED
 	}
 	t.PingHosts[key] = value
 	return SUCCESS
 }
-func (t *TempDB) DeletePingHost(key string) int {
+func (t tempDB) DeletePingHost(key string) int {
 	delete(t.PingHosts, key)
 	return SUCCESS
 }
-func (t *TempDB) SearchHost(key string) (*PingHostEntry, bool) {
+func (t tempDB) SearchHost(key string) (*PingHostEntry, bool) {
 	if host_entry, exist := t.PingHosts[key]; exist {
 		return host_entry, exist
 	} else {
 		return nil, exist
 	}
 }
-func (t *TempDB) GetPingHost() *map[string]*PingHostEntry {
+func (t tempDB) GetPingHost() *map[string]*PingHostEntry {
 	return &t.PingHosts
 }
 
-func InitDB(default_cnt int, default_name string) *TempDB {
+func InitDB(default_cnt int, default_name string) tempDB {
 	if PrimaryDB == nil {
-		PrimaryDB = &TempDB{map[string]*PingHostEntry{}, default_cnt, default_name}
+		PrimaryDB = &tempDB{map[string]*PingHostEntry{}, default_cnt, default_name}
 	}
 
-	return PrimaryDB
+	return *PrimaryDB
 }
