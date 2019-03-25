@@ -82,7 +82,7 @@ func TestGetPingStatus(t *testing.T) {
 	c.SetParamNames("hostname")
 	c.SetParamValues("google.com")
 
-	if assert.NoError(t, a.DeletePing(c)) {
+	if assert.NoError(t, a.GetPingStatus(c)) {
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 	}
 }
