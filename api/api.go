@@ -28,9 +28,14 @@ func (a *Api) CreatePing(c echo.Context) error {
 	if err != nil {
 		c.Logger().Error(err)
 		return c.String(http.StatusBadRequest, "Invaild count")
+	} else {
+		if count > 1024 {
+			c.Logger().Error(err)
+			return c.String(http.StatusBadRequest, "Exceed count limitation")
+		}
 	}
 
-	channel := make(chan string, 1)
+	channel := make(chan string, 1024)
 
 	ping_cmd := exec.Command("ping", "-c", count_string, host_name)
 	//ping_cmd := exec.Command("./ping.sh", count_string, host_name)
@@ -79,6 +84,7 @@ func (a *Api) ExecutePing(c echo.Context, ping_cmd *exec.Cmd, host_name string, 
 		}
 	}
 	ping_cmd.Wait()
+	close(channel)
 
 }
 func (a *Api) GetPing(c echo.Context) error {
