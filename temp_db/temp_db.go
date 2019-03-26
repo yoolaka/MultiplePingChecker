@@ -26,10 +26,9 @@ type (
 )
 
 var (
-	PrimaryDB        *tempDB = nil
-	PrimaryInterface *TempDB = nil
-	SUCCESS                  = 1
-	FAILED                   = 0
+	PrimaryDB *tempDB = nil
+	SUCCESS           = 1
+	FAILED            = 0
 )
 
 func (t tempDB) InsertPingHost(key string, value *PingHostEntry) int {
